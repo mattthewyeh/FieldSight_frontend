@@ -17,7 +17,7 @@ function App() {
       <Dashboard />
     ) : (
       <div className="start-screen">
-        <button onClick={handleStartSession}>
+        <button onClick={handleStartSession} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 transition-colors">
           Start Session
         </button>
       </div>
