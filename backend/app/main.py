@@ -1,5 +1,8 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI
-from fastapi. middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 from app.routes import rover, images, health, telemetry
 
 app= FastAPI( title= "FieldSight API")
@@ -21,8 +24,8 @@ app.include_router(health.router)
 app.include_router(rover.router)
 app.include_router(images.router)
 app.include_router(telemetry.router)
- 
+
 @app.get("/")
 def root():
     return {"message": "FieldSight API is running"}
- 
+
