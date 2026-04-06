@@ -1,8 +1,17 @@
+<<<<<<< Updated upstream
 import google. generativeai as genai
 import os
 
 genai. configure (api_key =os. getenv ("GEMINI _API_KEY"))
 model = genai.GenerativeModel("gemini - 1.5 -flash")
+=======
+import google.generativeai as genai
+import os
+import json
+
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+model = genai.GenerativeModel("gemini-2.0-flash")
+>>>>>>> Stashed changes
 
 async def analyze_image(image_bytes: bytes) -> dict:
     response = model.generate_content([
@@ -10,6 +19,7 @@ async def analyze_image(image_bytes: bytes) -> dict:
             "mime_type": "image/jpeg",
             "data": image_bytes
         },
+<<<<<<< Updated upstream
         """
         You are a plant health visual assessment assistant. Analyze the provided plant image using only visible evidence.
 
@@ -81,6 +91,46 @@ Output requirements:
     ])
 
     result = json.loads(esponse.text.strip())
+=======
+
+        """
+You are a plant health visual assessment assistant. Analyze the provided plant image using only visible evidence.
+
+Evaluate visible indicators:
+- Leaf discoloration (yellowing, browning, blackening)
+- Spotting patterns (circular lesions, irregular spots)
+- Edge burn or necrosis
+- Wilting or drooping
+- Mold or powdery coatings
+- Leaf curling or deformation
+- Stem damage
+- Pest-like chewing or mining damage
+
+Severity rules:
+- 0 = healthy, no visible symptoms
+- 3 = moderate, clear damage, spreading
+- 6 = severe, large portions affected, major decline
+
+Rules:
+- Report only visually supported findings
+- If image is unclear or evidence is weak, set confidence_score below 50
+- severity must be 0 if disease_status is HEALTHY
+
+Return raw JSON only, no markdown, no extra text:
+{
+    "disease_status": "DISEASED" or "HEALTHY",
+    "severity": 1 or 2 or 3,
+    "confidence_score": 0 to 100,
+    "short_explanation": "brief visual explanation of what you see"
+}
+"""
+        
+
+
+    ])
+
+    result = json.loads(response.text.strip())
+>>>>>>> Stashed changes
     return result
 
    
