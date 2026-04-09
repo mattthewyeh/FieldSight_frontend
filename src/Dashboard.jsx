@@ -11,7 +11,6 @@ export default function Dashboard({ onLogout, farmCoords }) {
   const roverMarker = useRef(null);
   const resultMarkers = useRef([]); 
   
-  // States
   const [searchInput, setSearchInput] = useState('');
   const [currentCoords, setCurrentCoords] = useState(farmCoords || { lng: -121.88107, lat: 37.33332 });
   const [isScanning, setIsScanning] = useState(false);
@@ -28,7 +27,7 @@ export default function Dashboard({ onLogout, farmCoords }) {
     severity: { early: '#FFD700', moderate: '#FF8C00', critical: '#FF0000' }
   };
 
-  // 1. INITIALIZE MAP (Once Only)
+  // 1. INITIALIZE MAP
   useEffect(() => {
     if (!MAPBOX_TOKEN) {
       setError("Config Error: Mapbox Token missing.");
@@ -46,14 +45,10 @@ export default function Dashboard({ onLogout, farmCoords }) {
 
       map.current.on('load', () => {
         map.current.resize();
-        
-        // Add Path Data Source
         map.current.addSource('route', {
           type: 'geojson',
           data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
         });
-
-        // Add Path Visual Layer
         map.current.addLayer({
           id: 'route',
           type: 'line',
@@ -61,52 +56,33 @@ export default function Dashboard({ onLogout, farmCoords }) {
           paint: { 'line-color': '#A5D6A7', 'line-width': 4, 'line-dasharray': [2, 1] }
         });
       });
-
-      map.current.on('error', (e) => setError(`Mapbox Error: ${e.error?.message}`));
-
     } catch (e) {
       setError(`Startup Error: ${e.message}`);
     }
-
     return () => map.current?.remove();
   }, []);
 
-  // 2. DRAWING CLICK HANDLER
-  // We use a separate effect for the click event so we don't rebuild the map
+  // 2. DRAWING HANDLER
   useEffect(() => {
     if (!map.current) return;
-
     const handleMapClick = (e) => {
       if (!isDrawing) return;
-
-      try {
-        const newPoint = [e.lngLat.lng, e.lngLat.lat];
-        setDrawPath((prev) => {
-          const updated = [...prev, newPoint];
-          // Update the line on the map immediately
-          const source = map.current.getSource('route');
-          if (source) {
-            source.setData({
-              type: 'Feature',
-              geometry: { type: 'LineString', coordinates: updated }
-            });
-          }
-          return updated;
-        });
-      } catch (err) {
-        setError(`Drawing Error: ${err.message}`);
-        setIsDrawing(false);
-      }
+      const newPoint = [e.lngLat.lng, e.lngLat.lat];
+      setDrawPath((prev) => {
+        const updated = [...prev, newPoint];
+        const source = map.current.getSource('route');
+        if (source) source.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: updated } });
+        return updated;
+      });
     };
-
     map.current.on('click', handleMapClick);
     return () => map.current?.off('click', handleMapClick);
   }, [isDrawing]);
 
-  // 3. NAVIGATION LOGIC
+  // 3. NAVIGATION & PIN GENERATION
   const startFollowPath = () => {
     if (drawPath.length < 2) {
-      setError("Please click on the map to draw a path first.");
+      setError("Please draw a path first.");
       return;
     }
 
@@ -114,17 +90,12 @@ export default function Dashboard({ onLogout, farmCoords }) {
     setIsDrawing(false);
     setScanComplete(false);
     setError(null);
-
-    // Clear old markers
     resultMarkers.current.forEach(m => m.remove());
     resultMarkers.current = [];
 
     const el = document.createElement('div');
-    el.innerHTML = `<span style="font-size: 30px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));">🚜</span>`; 
-    
-    roverMarker.current = new mapboxgl.Marker(el)
-      .setLngLat(drawPath[0])
-      .addTo(map.current);
+    el.innerHTML = `<span style="font-size: 30px;">🚜</span>`; 
+    roverMarker.current = new mapboxgl.Marker(el).setLngLat(drawPath[0]).addTo(map.current);
 
     let step = 0;
     const moveInterval = setInterval(() => {
@@ -133,20 +104,56 @@ export default function Dashboard({ onLogout, farmCoords }) {
           clearInterval(moveInterval);
           setIsScanning(false);
           setScanComplete(true);
-          if (roverMarker.current) roverMarker.current.remove();
+          roverMarker.current?.remove();
           return;
         }
 
         const target = drawPath[step];
         roverMarker.current.setLngLat(target);
         map.current.easeTo({ center: target, duration: 800 });
+
+        // Logic to "find" an issue every few steps for demo purposes
+        if (step > 0 && step % 3 === 0) {
+          let type, color;
+          // IF-ELSE logic to determine issue category
+          if (step === 3) {
+            type = "Early Signs Detected";
+            color = theme.severity.early;
+          } else if (step === 6) {
+            type = "Moderate Infection";
+            color = theme.severity.moderate;
+          } else {
+            type = "Critical Action Required";
+            color = theme.severity.critical;
+          }
+
+          const popupMarkup = `
+            <div style="padding: 10px; min-width: 150px;">
+              <div style="width: 100%; height: 80px; background: #eee; border-radius: 4px; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; color: #999; font-size: 10px; border: 1px dashed #ccc;">
+                [No Image Available]
+              </div>
+              <strong style="color: ${color}; display: block; margin-bottom: 4px;">${type}</strong>
+              <div style="font-size: 11px; color: #666;">
+                Loc: ${target[0].toFixed(4)}, ${target[1].toFixed(4)}<br/>
+                Status: Pending Review
+              </div>
+            </div>
+          `;
+
+          const m = new mapboxgl.Marker({ color })
+            .setLngLat(target)
+            .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(popupMarkup))
+            .addTo(map.current);
+          
+          resultMarkers.current.push(m);
+        }
+
         step++;
       } catch (err) {
-        setError(`Rover Crash: ${err.message}`);
+        setError(`Animation Error: ${err.message}`);
         clearInterval(moveInterval);
-        setIsScanning(false);
       }
-    }, 1000);
+    }, 1200);
   };
 
   const handleLocateFarm = async () => {
@@ -175,7 +182,6 @@ export default function Dashboard({ onLogout, farmCoords }) {
       <main style={{ flex: 1, display: 'flex', padding: '20px', gap: '20px', overflow: 'hidden' }}>
         <div style={{ width: '320px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
-          {/* Status Section */}
           <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '15px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
             <h3 style={{ margin: '0 0 10px 0', fontSize: '11px', color: theme.textGrey }}>SYSTEM STATUS</h3>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: theme.darkBrown }}>
@@ -183,7 +189,6 @@ export default function Dashboard({ onLogout, farmCoords }) {
             </div>
           </div>
 
-          {/* Path Planner Section */}
           <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '15px', border: `1px solid ${theme.sageGreen}` }}>
             <h4 style={{ margin: '0 0 15px 0', fontSize: '13px', fontWeight: 'bold' }}>PATH PLANNER</h4>
             <button 
@@ -199,9 +204,17 @@ export default function Dashboard({ onLogout, farmCoords }) {
               style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: isDrawing ? '#FF8C00' : theme.sageGreen, color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}>
               <PenTool size={18} /> {isDrawing ? 'LOCK PATH' : 'DRAW PATH'}
             </button>
-            <p style={{ fontSize: '11px', color: '#666', marginTop: '10px' }}>
-              {isDrawing ? "Click on the map to add waypoints." : "Plan a custom route for the rover."}
-            </p>
+            <div style={{ marginTop: '15px', fontSize: '12px' }}>
+               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: theme.severity.early }} /> Early Signs
+               </div>
+               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: theme.severity.moderate }} /> Moderate
+               </div>
+               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: theme.severity.critical }} /> Critical
+               </div>
+            </div>
           </div>
 
           {error && (
@@ -210,18 +223,12 @@ export default function Dashboard({ onLogout, farmCoords }) {
             </div>
           )}
 
-          {scanComplete && (
-            <div style={{ backgroundColor: '#E8F5E9', padding: '15px', borderRadius: '15px', border: '1px solid #2e7d32', color: '#2e7d32', fontSize: '12px' }}>
-              <CheckCircle size={18} /> Path completed successfully.
-            </div>
-          )}
-
           <button 
             onClick={startFollowPath} 
             disabled={isScanning || drawPath.length < 2}
             style={{ marginTop: 'auto', padding: '18px', borderRadius: '12px', color: 'white', fontWeight: 'bold', backgroundColor: (isScanning || drawPath.length < 2) ? '#ccc' : '#2e7d32', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
             {isScanning ? <Loader2 className="animate-spin" /> : <Play />} 
-            {isScanning ? 'MOVING...' : 'RUN PLANNED PATH'}
+            {isScanning ? 'SCANNING...' : 'RUN PLANNED PATH'}
           </button>
         </div>
 
@@ -241,7 +248,7 @@ export default function Dashboard({ onLogout, farmCoords }) {
           <div ref={mapContainer} style={{ flex: 1, borderRadius: '20px', overflow: 'hidden', backgroundColor: '#eee', position: 'relative', border: '6px solid white', cursor: isDrawing ? 'crosshair' : 'grab' }}>
              {isDrawing && (
                <div style={{ position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', backgroundColor: 'rgba(0,0,0,0.8)', color: 'white', padding: '8px 20px', borderRadius: '30px', fontSize: '13px', zIndex: 10, border: '1px solid white' }}>
-                 Drawing Mode: Click map to set points
+                 Click map to set Waypoints
                </div>
              )}
           </div>
