@@ -1,3 +1,11 @@
+node_modules/
+__pycache__/
+.env
+.DS_Store
+.venv/
+backend/.env
+
+
 # Logs
 logs
 *.log
