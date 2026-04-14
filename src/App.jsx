@@ -4,35 +4,56 @@ import Auth from './Auth/Auth';
 import Dashboard from './Dashboard'; 
 
 export default function App() {
-  // We now have three possible views: 'landing', 'login', or 'dashboard'
+  // 'landing' is the default view for fieldsightproject.com
   const [currentView, setCurrentView] = useState('landing');
-  const [farmLocation, setFarmLocation] = useState({ lng: -118.2437, lat: 34.0522 });
+  
+  // Default coordinates (San Jose area fallback)
+  const [farmLocation, setFarmLocation] = useState({ lng: -121.88107, lat: 37.33332 });
 
+  // Called when Login.jsx successfully gets an access_token from /auth/login
   const handleLoginSuccess = (coords) => {
-    if (coords) setFarmLocation(coords);
-    setCurrentView('dashboard'); // Switch to dashboard on success
+    if (coords) {
+      setFarmLocation(coords);
+    }
+    setCurrentView('dashboard'); 
   };
 
+  // Resets the view and clears local state on logout
   const handleLogout = () => {
-    setCurrentView('landing'); // Go back to the very start on logout
+    localStorage.removeItem("token"); // Clean up the session token
+    setCurrentView('landing'); 
   };
 
   return (
-    <div style={{ minHeight: '100vh', width: '100vw', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ 
+      minHeight: '100vh', 
+      width: '100%', 
+      display: 'flex', 
+      flexDirection: 'column',
+      margin: 0,
+      padding: 0,
+      overflowX: 'hidden' 
+    }}>
       
-      {/* 1. LANDING PAGE VIEW */}
+      {/* 1. LANDING PAGE - Default Entry Point */}
       {currentView === 'landing' && (
         <LandingPage onLoginClick={() => setCurrentView('login')} />
       )}
 
-      {/* 2. AUTHENTICATION VIEW */}
+      {/* 2. AUTHENTICATION VIEW (Login/Signup) */}
       {currentView === 'login' && (
-        <Auth onLoginSuccess={handleLoginSuccess} />
+        <Auth 
+          onLoginSuccess={handleLoginSuccess} 
+          onBack={() => setCurrentView('landing')} 
+        />
       )}
 
-      {/* 3. DASHBOARD VIEW */}
+      {/* 3. DASHBOARD VIEW - Protected View */}
       {currentView === 'dashboard' && (
-        <Dashboard onLogout={handleLogout} farmCoords={farmLocation} />
+        <Dashboard 
+          onLogout={handleLogout} 
+          farmCoords={farmLocation} 
+        />
       )}
 
     </div>

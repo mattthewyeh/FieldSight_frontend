@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Battery, Radio, Loader2, ShieldAlert, PenTool, Play, Square } from 'lucide-react';
+import { Battery, Radio, Loader2, ShieldAlert, PenTool, Play, Square, Clock } from 'lucide-react';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+const VITE_API_URL = import.meta.env.VITE_API_URL || "https://api.fieldsightproject.com";
 
 export default function Dashboard({ onLogout, farmCoords }) {
-  // 1. DYNAMIC API URL 
-  const API_URL = import.meta.env.VITE_API_URL || "http://64.181.240.74:8000";
+  const FARMER_ID = 1; // Backend requirement for query params
 
   const mapContainer = useRef(null);
   const map = useRef(null);
@@ -21,7 +21,9 @@ export default function Dashboard({ onLogout, farmCoords }) {
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawPath, setDrawPath] = useState([]);
   const [error, setError] = useState(null);
-  const [battery, setBattery] = useState(88);
+  const [battery, setBattery] = useState(100);
+  const [lastUpdate, setLastUpdate] = useState("Never");
+  const [currentSessionId, setCurrentSessionId] = useState(null);
 
   const theme = {
     sageGreen: '#A3B18A',
@@ -29,7 +31,7 @@ export default function Dashboard({ onLogout, farmCoords }) {
     severity: { early: '#FFD700', moderate: '#FF8C00', critical: '#FF0000' }
   };
 
-  // Initialize Map
+  // --- MAP INITIALIZATION ---
   useEffect(() => {
     if (!MAPBOX_TOKEN || !mapContainer.current) return;
     
@@ -55,10 +57,9 @@ export default function Dashboard({ onLogout, farmCoords }) {
     });
 
     return () => map.current?.remove();
-    // Added farmCoords to dependency array so it updates if user logs in with new coords
   }, [farmCoords]); 
 
-  // Handle Path Drawing
+  // --- DRAWING LOGIC ---
   useEffect(() => {
     if (!map.current) return;
     const handleMapClick = (e) => {
@@ -77,19 +78,20 @@ export default function Dashboard({ onLogout, farmCoords }) {
     return () => map.current?.off('click', handleMapClick);
   }, [isDrawing]);
 
-  // FETCH TELEMETRY & IMAGES
+  // --- POLLING LOGIC ---
   const pollBackend = async () => {
     const token = localStorage.getItem("token");
     try {
-      // 1. Get Rover Position
-      const telRes = await fetch(`${API_URL}/api/telemetry/latest`, {
+      // 1. Fetch Rover Status with required farmer_id query param
+      const statusRes = await fetch(`${VITE_API_URL}/api/rover/status?farmer_id=${FARMER_ID}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const telData = await telRes.json();
+      const statusData = await statusRes.json();
       
-      if (telData && telRes.ok) {
-        const pos = [telData.longitude, telData.latitude];
-        setBattery(telData.battery_level);
+      if (statusRes.ok) {
+        const pos = [statusData.gps_lng, statusData.gps_lat];
+        setBattery(statusData.battery);
+        setLastUpdate(new Date(statusData.captured_at).toLocaleTimeString());
         
         if (!roverMarker.current) {
           const el = document.createElement('div');
@@ -101,8 +103,8 @@ export default function Dashboard({ onLogout, farmCoords }) {
         map.current.easeTo({ center: pos, duration: 800 });
       }
 
-      // 2. Get Detections
-      const imgRes = await fetch(`${API_URL}/api/images/detections`, {
+      // 2. Fetch Detections
+      const imgRes = await fetch(`${VITE_API_URL}/api/images/detections`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const detections = await imgRes.json();
@@ -111,19 +113,10 @@ export default function Dashboard({ onLogout, farmCoords }) {
         detections.forEach(det => {
           if (!resultMarkers.current.has(det.id)) {
             const color = theme.severity[det.severity.toLowerCase()] || '#ccc';
-            const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
-              <div style="padding: 10px;">
-                <img src="${det.image_url}" style="width:100%; border-radius:4px; margin-bottom:5px;"/>
-                <strong style="color: ${color};">${det.label}</strong>
-                <p style="font-size: 10px; margin:0;">AI Confidence: ${(det.confidence * 100).toFixed(1)}%</p>
-              </div>
-            `);
-
             const marker = new mapboxgl.Marker({ color })
               .setLngLat([det.lng, det.lat])
-              .setPopup(popup)
+              .setPopup(new mapboxgl.Popup().setHTML(`<b>${det.finding}</b>`))
               .addTo(map.current);
-            
             resultMarkers.current.set(det.id, marker);
           }
         });
@@ -133,6 +126,7 @@ export default function Dashboard({ onLogout, farmCoords }) {
     }
   };
 
+  // --- MISSION CONTROL ---
   const startFollowPath = async () => {
     if (drawPath.length < 2) return setError("Please draw a path first.");
     const token = localStorage.getItem("token");
@@ -141,7 +135,7 @@ export default function Dashboard({ onLogout, farmCoords }) {
       setIsScanning(true);
       setError(null);
 
-      const response = await fetch(`${API_URL}/api/rover/start`, {
+      const response = await fetch(`${VITE_API_URL}/api/rover/start?farmer_id=${FARMER_ID}`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -150,11 +144,17 @@ export default function Dashboard({ onLogout, farmCoords }) {
         body: JSON.stringify({ path: drawPath })
       });
 
-      if (!response.ok) throw new Error("Backend failed to start rover");
-      pollInterval.current = setInterval(pollBackend, 1500);
+      const data = await response.json();
+      if (!response.ok) {
+        const errorMsg = data.detail?.[0]?.msg || data.detail || "Failed to start";
+        throw new Error(errorMsg);
+      }
+
+      setCurrentSessionId(data.session_id);
+      pollInterval.current = setInterval(pollBackend, 2000);
 
     } catch (err) {
-      setError(`Connection Failure: ${err.message}`);
+      setError(`Mission Error: ${err.message}`);
       setIsScanning(false);
     }
   };
@@ -162,12 +162,17 @@ export default function Dashboard({ onLogout, farmCoords }) {
   const stopScan = async () => {
     const token = localStorage.getItem("token");
     clearInterval(pollInterval.current);
-    await fetch(`${API_URL}/api/rover/stop`, { 
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    
+    try {
+      await fetch(`${VITE_API_URL}/api/rover/stop?farmer_id=${FARMER_ID}`, { 
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+    } catch (err) { console.error("Stop signal failed"); }
+    
     setIsScanning(false);
-    setError("MANUAL OVERRIDE: Rover stopped.");
+    setCurrentSessionId(null);
+    setError("Mission manually terminated.");
   };
 
   const handleLocateFarm = async () => {
@@ -182,7 +187,7 @@ export default function Dashboard({ onLogout, farmCoords }) {
   };
 
   return (
-    <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', backgroundColor: '#F4F7F2', position: 'fixed', top: 0, left: 0, fontFamily: "'Inter', sans-serif" }}>
+    <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', backgroundColor: '#F4F7F2', position: 'fixed', top: 0, left: 0, fontFamily: 'Inter, sans-serif' }}>
       <header style={{ height: '70px', backgroundColor: theme.darkBrown, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 30px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <Radio size={28} color="#A5D6A7" />
@@ -193,10 +198,17 @@ export default function Dashboard({ onLogout, farmCoords }) {
       
       <main style={{ flex: 1, display: 'flex', padding: '20px', gap: '20px', overflow: 'hidden' }}>
         <div style={{ width: '320px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
           <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '15px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-            <h3 style={{ margin: '0 0 10px 0', fontSize: '11px', color: '#4A4A4A' }}>SYSTEM STATUS</h3>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: theme.darkBrown }}>
-              <Battery size={24} color="#2e7d32" /> <span style={{ fontSize: '24px', fontWeight: 'bold' }}>{battery}%</span>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '11px', color: '#888', letterSpacing: '1px' }}>SYSTEM STATUS</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: theme.darkBrown }}>
+                    <Battery size={24} color={battery > 20 ? "#2e7d32" : "#d32f2f"} /> 
+                    <span style={{ fontSize: '24px', fontWeight: 'bold' }}>{battery}%</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#666', fontSize: '12px' }}>
+                    <Clock size={14} /> Last update: {lastUpdate}
+                </div>
             </div>
           </div>
 
@@ -210,7 +222,7 @@ export default function Dashboard({ onLogout, farmCoords }) {
                   map.current.getSource('route')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] } });
                 }
               }}
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: isDrawing ? '#FF8C00' : theme.sageGreen, color: 'white', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}>
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: isDrawing ? '#FF8C00' : theme.sageGreen, color: 'white', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
               <PenTool size={18} /> {isDrawing ? 'LOCK PATH' : 'DRAW PATH'}
             </button>
           </div>
@@ -226,14 +238,14 @@ export default function Dashboard({ onLogout, farmCoords }) {
               <button 
                 onClick={startFollowPath} 
                 disabled={drawPath.length < 2}
-                style={{ flex: 1, padding: '18px', borderRadius: '12px', color: 'white', fontWeight: 'bold', backgroundColor: (drawPath.length < 2) ? '#ccc' : '#2e7d32', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-                <Play /> START MISSION
+                style={{ flex: 1, padding: '18px', borderRadius: '12px', color: 'white', fontWeight: 'bold', backgroundColor: (drawPath.length < 2) ? '#ccc' : '#2e7d32', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <Play size={20} /> START MISSION
               </button>
             ) : (
               <button 
                 onClick={stopScan} 
-                style={{ flex: 1, padding: '18px', borderRadius: '12px', color: 'white', fontWeight: 'bold', backgroundColor: '#dc2626', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-                <Square /> STOP ROVER
+                style={{ flex: 1, padding: '18px', borderRadius: '12px', color: 'white', fontWeight: 'bold', backgroundColor: '#dc2626', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <Square size={20} /> STOP ROVER
               </button>
             )}
           </div>
@@ -244,18 +256,17 @@ export default function Dashboard({ onLogout, farmCoords }) {
             <input 
               type="text" 
               placeholder="Enter farm address..." 
-              style={{ flex: 1, padding: '14px', borderRadius: '10px', border: '1px solid #ddd' }}
+              style={{ flex: 1, padding: '14px', borderRadius: '10px', border: '1px solid #ddd', outline: 'none' }}
               value={searchInput} 
               onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleLocateFarm()}
             />
             <button onClick={handleLocateFarm} style={{ padding: '0 25px', backgroundColor: theme.darkBrown, color: 'white', borderRadius: '10px', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>LOCATE</button>
           </div>
 
-          <div ref={mapContainer} style={{ flex: 1, borderRadius: '20px', overflow: 'hidden', backgroundColor: '#eee', position: 'relative', border: '6px solid white', cursor: isDrawing ? 'crosshair' : 'grab' }}>
+          <div ref={mapContainer} style={{ flex: 1, borderRadius: '20px', overflow: 'hidden', backgroundColor: '#eee', position: 'relative', border: '6px solid white', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
              {isScanning && (
-               <div style={{ position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', backgroundColor: 'rgba(46, 125, 50, 0.9)', color: 'white', padding: '8px 20px', borderRadius: '30px', fontSize: '13px', zIndex: 10, display: 'flex', alignItems: 'center', gap: '10px' }}>
-                 <Loader2 size={16} className="animate-spin" /> LIVE ROVER TELEMETRY ACTIVE
+               <div style={{ position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', backgroundColor: 'rgba(46, 125, 50, 0.9)', color: 'white', padding: '8px 20px', borderRadius: '30px', fontSize: '13px', zIndex: 10, display: 'flex', alignItems: 'center', gap: '10px', backdropFilter: 'blur(4px)' }}>
+                 <Loader2 size={16} className="animate-spin" /> MISSION IN PROGRESS
                </div>
              )}
           </div>
