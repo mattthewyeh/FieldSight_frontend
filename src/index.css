@@ -117,3 +117,287 @@ code {
 .animate-spin {
   animation: spin 1s linear infinite;
 }
+:root {
+  --sage-green: #acc0a4;
+  --dark-earth: #3e322b;
+  --light-bg: #f4f7f2;
+  --text-main: #2d3a24;
+}
+
+.landing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 5%;
+  background: var(--light-bg);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.logo { font-size: 1.5rem; font-weight: 800; color: var(--dark-earth); }
+.logo-accent { color: #6b7c5c; }
+
+.nav-links { display: flex; gap: 30px; }
+.nav-links a { 
+  text-decoration: none; 
+  color: var(--dark-earth); 
+  font-weight: 600;
+  transition: color 0.3s;
+}
+.nav-links a:hover { color: var(--sage-green); }
+
+.login-btn {
+  background: var(--dark-earth);
+  color: white;
+  padding: 10px 25px;
+  border-radius: 25px;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+  transition: transform 0.2s;
+}
+.login-btn:hover { transform: scale(1.05); }
+
+.stat-card { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+.stat-title { border-bottom: 4px solid var(--sage-green); display: inline-block; margin-bottom: 15px; }
+.stat-image { width: 100%; border-radius: 10px; height: 200px; object-fit: cover; }
+
+.landing-footer {
+  background: var(--dark-earth);
+  color: var(--sage-green);
+  padding: 40px;
+  text-align: center;
+  margin-top: 50px;
+}
+/* The Header Background */
+.landing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 5%;
+  background-color: #f5ebe0; /* Light Pastel Brown / Cream */
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+/* Navigation Links */
+.nav-links {
+  display: flex;
+  gap: 40px;
+}
+
+.nav-links a {
+  text-decoration: none;
+  color: #3e2723; /* Deep Brown for contrast */
+  font-weight: 400; /* Regular weight by default */
+  font-size: 16px;
+  transition: all 0.2s ease-in-out;
+  display: inline-block;
+}
+
+/* THE HOVER EFFECT */
+.nav-links a:hover {
+  font-weight: 800; /* Makes it bold */
+  color: #5d4037;   /* Slightly darker brown when hovering */
+  transform: scale(1.05); /* Optional: slightly grows the text for extra pop */
+}
+
+/* The Login Button */
+.login-btn {
+  background-color: #3e2723;
+  color: #ffffff;
+  padding: 10px 24px;
+  border-radius: 30px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.login-btn:hover {
+  background-color: #5d4037;
+}
+.nav-links a {
+  position: relative;
+  text-decoration: none;
+  color: #3e2723;
+  transition: all 0.2s ease-in-out;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-links a:hover {
+  font-weight: 800; /* Bolds on hover */
+}
+
+/* This invisible 'after' block reserves space so the links don't move */
+.nav-links a::after {
+  display: block;
+  content: attr(title);
+  font-weight: 800;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+/* 1. Header Background - Light Pastel Brown */
+.landing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 5%;
+  background-color: #f5ebe0; /* Soft Pastel Brown */
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #3e2723; /* Dark Earth Brown */
+}
+
+.logo-accent {
+  color: #6b7c5c; /* Sage Green Accent */
+}
+
+/* 2. Navigation Link Styling */
+.nav-links {
+  display: flex;
+  gap: 40px;
+}
+
+.nav-links a {
+  text-decoration: none;
+  color: #5d4037; /* Medium Brown */
+  font-weight: 400;
+  font-size: 16px;
+  position: relative;
+  transition: all 0.2s ease-in-out;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 3. HOVER EFFECT - Bolds the text */
+.nav-links a:hover {
+  font-weight: 800;
+  color: #3e2723; /* Darker brown on hover */
+}
+
+/* 4. CLICK EFFECT - Expands in size when clicked */
+.nav-links a:active {
+  transform: scale(1.2); /* Expands to 120% size */
+  transition: transform 0.1s ease;
+}
+
+/* 5. The "No-Wiggle" Trick */
+/* This makes sure the header doesn't jump around when text bolds */
+.nav-links a::after {
+  display: block;
+  content: attr(title);
+  font-weight: 800;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+
+/* 6. Button Styling */
+.login-btn {
+  background-color: #3e2723;
+  color: white;
+  padding: 10px 24px;
+  border-radius: 30px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.login-btn:active {
+  transform: scale(0.95); /* Buttons usually "shrink" slightly on click for a tactile feel */
+}
+/* HEADER CONTAINER */
+.landing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 8%;
+  background-color: #E6D5C3 !important; /* LIGHT PASTEL BROWN */
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.logo {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #3E2723; /* Dark Brown */
+}
+
+/* NAVIGATION LINKS */
+.nav-links {
+  display: flex;
+  gap: 35px;
+}
+
+.nav-links a {
+  text-decoration: none;
+  color: #5D4037; /* Medium Brown text */
+  font-weight: 500;
+  font-size: 17px;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* THE BOLD HOVER EFFECT */
+.nav-links a:hover {
+  color: #3E2723;
+  font-weight: 900; /* BOLDED */
+  transform: translateY(-2px); /* Slight lift for interaction */
+}
+
+/* THE CLICK EXPAND EFFECT */
+.nav-links a:active {
+  transform: scale(1.25); /* EXPANES ON CLICK */
+  transition: transform 0.1s ease;
+}
+
+/* NO-WIGGLE TRICK: Prevents links from moving when they get bold */
+.nav-links a::after {
+  content: attr(data-text);
+  content: attr(data-text) / "";
+  height: 0;
+  visibility: hidden;
+  overflow: hidden;
+  user-select: none;
+  pointer-events: none;
+  font-weight: 900;
+}
+
+/* LOGIN BUTTON */
+.login-btn {
+  background-color: #3E2723;
+  color: white;
+  padding: 12px 28px;
+  border-radius: 50px;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.3s, transform 0.2s;
+}
+
+.login-btn:hover {
+  background-color: #5D4037;
+  transform: scale(1.05);
+}

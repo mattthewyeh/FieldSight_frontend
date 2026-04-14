@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { User, MapPin, ShieldCheck, AtSign, ArrowRight, Loader2 } from 'lucide-react';
 
 export default function Signup({ onGoToLogin }) {
+  // Use the env variable or fallback to the direct IP
   const API_URL = import.meta.env.VITE_API_URL || "http://64.181.240.74:8000";
 
   const [formData, setFormData] = useState({
@@ -35,41 +36,45 @@ export default function Signup({ onGoToLogin }) {
       farm_name: formData.farmName
     };
 
-    console.log("DEBUG: Sending Signup Data:", signupData);
+    // Construct the URL to test
+    const targetUrl = `${API_URL}/api/auth/signup`;
+    console.log("DIAGNOSTIC: Attempting to connect to:", targetUrl);
 
     try {
-      const response = await fetch(`${API_URL}/api/auth/signup`, {
+      const response = await fetch(targetUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(signupData),
       });
 
-      // DEBUG: Log the status code
-      console.log("DEBUG: Response Status:", response.status);
+      console.log("DIAGNOSTIC: Response Status Code:", response.status);
 
       if (response.ok) {
         const data = await response.json();
         onGoToLogin();
       } else {
-        // If 404, the URL is wrong. If 422, the data format is wrong.
-        const errorText = await response.text();
-        let errorMessage = `Error ${response.status}: `;
-        
-        try {
-          const errorJson = JSON.parse(errorText);
-          errorMessage += errorJson.detail || "Server rejected request";
-        } catch {
-          errorMessage += (response.status === 404) 
-            ? "Route not found. Check if backend needs /auth/signup (no /api/)" 
-            : "Unknown Server Error";
+        // --- SPECIFIC ERROR LOGGING FOR THE UI ---
+        let diagnosticMsg = `Error ${response.status}: `;
+
+        if (response.status === 404) {
+          diagnosticMsg += "Backend Route Missing. The URL is wrong—your server doesn't have an endpoint at /api/auth/signup.";
+        } else if (response.status === 422) {
+          diagnosticMsg += "Data Format Error. The backend received the request but didn't like your data fields (check if 'full_name' or 'farm_name' is correct).";
+        } else if (response.status === 500) {
+          diagnosticMsg += "Backend Crash. The server is running but the database might be down or the user table doesn't exist.";
+        } else {
+          diagnosticMsg += "Unknown Server Error.";
         }
-        
-        setError(errorMessage);
-        console.error("DEBUG: Full Error Body:", errorText);
+
+        const errorText = await response.text();
+        console.error("DIAGNOSTIC: Full Server Response:", errorText);
+        setError(diagnosticMsg);
       }
     } catch (err) {
-      setError(`Network Error: ${err.message}. Ensure backend is running at ${API_URL}`);
-      console.error("DEBUG: Catch Block Error:", err);
+      // This happens if the server is totally offline or CORS blocks it
+      const offlineMsg = `Connection Failed: Cannot reach ${API_URL}. Check if your OCI backend is running and if you used http instead of https.`;
+      setError(offlineMsg);
+      console.error("DIAGNOSTIC: Network Catch Error:", err);
     } finally {
       setLoading(false);
     }
@@ -104,8 +109,20 @@ export default function Signup({ onGoToLogin }) {
         <h2 style={{ fontSize: '32px', fontFamily: "'Times New Roman', serif", color: theme.darkBrown, marginBottom: '8px' }}>Join FieldSight</h2>
         <p style={{ color: theme.textGrey, marginBottom: '30px', fontSize: '14px' }}>Register your farm to start monitoring.</p>
         
+        {/* THE DIAGNOSTIC UI BOX */}
         {error && (
-          <div style={{ color: '#D32F2F', backgroundColor: '#FFEBEE', padding: '10px', borderRadius: '6px', marginBottom: '15px', fontSize: '13px', fontWeight: 'bold' }}>
+          <div style={{ 
+            color: '#D32F2F', 
+            backgroundColor: '#FFEBEE', 
+            padding: '12px', 
+            borderRadius: '6px', 
+            marginBottom: '15px', 
+            fontSize: '13px', 
+            fontWeight: 'bold',
+            textAlign: 'left',
+            lineHeight: '1.4',
+            border: '1px solid #D32F2F'
+          }}>
             {error}
           </div>
         )}

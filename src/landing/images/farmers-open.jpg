@@ -1,0 +1,20 @@
+{/* HERO IMAGE */}
+<img 
+  src="http://googleusercontent.com/image_collection/image_retrieval/16172348197003940701_0" 
+  alt="Farmers working" 
+  style={{ width: '100%', display: 'block', height: 'auto' }}
+/>
+
+{/* PURPOSE IMAGE */}
+<img 
+  src="http://googleusercontent.com/image_collection/image_retrieval/16898187288038637183_0" 
+  alt="Purpose" 
+  style={{ width: '100%', borderRadius: '10px', marginBottom: '15px' }} 
+/>
+
+{/* OUR SOLUTION IMAGE */}
+<img 
+  src="http://googleusercontent.com/image_collection/image_retrieval/5607455562449589211_0" 
+  alt="Rover" 
+  style={{ width: '100%', borderRadius: '10px', marginBottom: '15px' }} 
+/>
