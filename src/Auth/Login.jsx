@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { User, Lock, ArrowRight, Loader2, ShieldAlert } from 'lucide-react';
 
 export default function Login({ onLogin, onGoToSignup }) {
-  // 1. DYNAMIC API URL - Standardized to BASE_URL
+  // 1. DYNAMIC API URL
   const BASE_URL = import.meta.env.VITE_API_URL || "https://api.fieldsightproject.com";
 
   const [username, setUsername] = useState('');
@@ -16,19 +16,18 @@ export default function Login({ onLogin, onGoToSignup }) {
     cardWhite: '#FFFFFF'
   };
 
-  // 2. BACKEND LOGIN HANDLER
   const handleLoginClick = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      // FIX: Changed API_URL to BASE_URL to match the definition above
+      // Logic: Sending camelCase to match your working Signup flow
       const response = await fetch(`${BASE_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          username: username, 
+          username: username.trim(), 
           password: password 
         }),
       });
@@ -36,20 +35,26 @@ export default function Login({ onLogin, onGoToSignup }) {
       const data = await response.json();
 
       if (response.ok) {
-        // SAVE TOKEN: Storing the bearer token for future authorized requests
+        // SUCCESS
         localStorage.setItem("token", data.access_token);
+        localStorage.setItem("farmerId", data.farmerId); // camelCase here too if backend sends it
         
-        // SAVE FARMER ID: Often needed for history/profile routes
-        localStorage.setItem("farmer_id", data.farmer_id);
-
-        // Success! Proceed to Dashboard (Default coords)
         onLogin({ lng: -121.88107, lat: 37.33332 }); 
       } else {
-        setError(data.detail || "Invalid credentials. Please try again.");
+        // ERROR DIAGNOSTICS
+        if (response.status === 401) {
+          setError("Invalid username or password.");
+        } else if (response.status === 422 && data.detail) {
+          // Field validation error (using camelCase for display)
+          const field = data.detail[0]?.loc[1] || "input";
+          setError(`Format Error: The ${field} field is invalid.`);
+        } else {
+          setError(data.detail || "Login failed. Please try again.");
+        }
       }
     } catch (err) {
-      // FIX: Changed API_URL to BASE_URL here too
-      setError(`Cannot reach the server at ${BASE_URL}. Ensure your backend is running.`);
+      // This tells us if it's a DNS/URL issue
+      setError(`Connection Failed: Cannot reach ${BASE_URL}.`);
       console.error("Login Error:", err);
     } finally {
       setLoading(false);
@@ -84,7 +89,7 @@ export default function Login({ onLogin, onGoToSignup }) {
             backgroundColor: '#FEE2E2', color: '#991B1B', padding: '12px', 
             borderRadius: '6px', marginBottom: '20px', fontSize: '13px', 
             display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'left',
-            border: '1px solid #FECACA'
+            border: '1px solid #FECACA', fontWeight: 'bold'
           }}>
             <ShieldAlert size={16} style={{ flexShrink: 0 }} /> <span>{error}</span>
           </div>
