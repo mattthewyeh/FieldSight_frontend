@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { User, Lock, ArrowRight, Loader2, ShieldAlert } from 'lucide-react';
 
 export default function Login({ onLogin, onGoToSignup }) {
-  // 1. DYNAMIC API URL
-const VITE_API_URL = import.meta.env.VITE_API_URL || "https://api.fieldsightproject.com";
+  // 1. DYNAMIC API URL - Standardized to BASE_URL
+  const BASE_URL = import.meta.env.VITE_API_URL || "https://api.fieldsightproject.com";
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -23,8 +23,8 @@ const VITE_API_URL = import.meta.env.VITE_API_URL || "https://api.fieldsightproj
     setError('');
 
     try {
-      // UPDATED: Now includes /api prefix to match compat.py prefix
-      const response = await fetch(`${API_URL}/api/auth/login`, {
+      // FIX: Changed API_URL to BASE_URL to match the definition above
+      const response = await fetch(`${BASE_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -42,14 +42,14 @@ const VITE_API_URL = import.meta.env.VITE_API_URL || "https://api.fieldsightproj
         // SAVE FARMER ID: Often needed for history/profile routes
         localStorage.setItem("farmer_id", data.farmer_id);
 
-        // Success! Proceed to Dashboard
+        // Success! Proceed to Dashboard (Default coords)
         onLogin({ lng: -121.88107, lat: 37.33332 }); 
       } else {
-        // Show specific backend error (e.g., "Invalid username or password")
         setError(data.detail || "Invalid credentials. Please try again.");
       }
     } catch (err) {
-      setError("Cannot reach the server at " + API_URL + ". Ensure your backend is running.");
+      // FIX: Changed API_URL to BASE_URL here too
+      setError(`Cannot reach the server at ${BASE_URL}. Ensure your backend is running.`);
       console.error("Login Error:", err);
     } finally {
       setLoading(false);
