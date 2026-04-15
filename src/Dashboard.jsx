@@ -106,7 +106,7 @@ export default function Dashboard({ onLogout, farmCoords }) {
     scanDataBuffer.forEach(scan => {
       if (resultMarkers.current.has(scan.scan_id)) return;
       
-      const color = theme.severity[scan.severity?.toLowerCase()] || theme.severity[scan.disease_status?.toLowerCase()] || '#ccc';
+      const color = (scan.severity ? theme.severity[scan.severity.toLowerCase()] : null) || '#FF8C00';
       
       const popupHTML = `
         <div style="color: black; padding: 10px; font-family: 'Inter', sans-serif; min-width: 240px; border-radius: 8px;">
