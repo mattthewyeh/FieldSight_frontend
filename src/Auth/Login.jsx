@@ -3,7 +3,7 @@ import { User, Lock, ArrowRight, Loader2, ShieldAlert } from 'lucide-react';
 
 export default function Login({ onLogin, onGoToSignup }) {
   // 1. DYNAMIC API URL
-  const API_URL = import.meta.env.VITE_API_URL || "http://64.181.240.74:8000";
+const VITE_API_URL = import.meta.env.VITE_API_URL || "https://api.fieldsightproject.com";
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');

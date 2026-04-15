@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { User, MapPin, ShieldCheck, AtSign, ArrowRight, Loader2 } from 'lucide-react';
 
 export default function Signup({ onGoToLogin }) {
-  const API_URL = import.meta.env.VITE_API_URL || "http://64.181.240.74:8000";
+  const API_URL = import.meta.env.VITE_API_URL || "https://api.fieldsightproject.com ";
+
 
   const [formData, setFormData] = useState({
     firstName: '',
