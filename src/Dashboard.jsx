@@ -32,8 +32,6 @@ export default function Dashboard({ onLogout, farmCoords }) {
   const [liveTelemetry, setLiveTelemetry] = useState({ lat: 0, lng: 0, speed: 0 });
   const [scanCount, setScanCount] = useState(0);
 
-  // --- NEW STATES FOR SCAN FLOW ---
-  const [mapLoaded, setMapLoaded] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [scanDataBuffer, setScanDataBuffer] = useState([]); 
 
@@ -69,7 +67,6 @@ export default function Dashboard({ onLogout, farmCoords }) {
     scansWS.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
       if (data.type === "scan.stored") {
-        // Buffer the data instead of adding markers immediately
         setScanDataBuffer(prev => [...prev, data.scan]);
         setScanCount(prev => prev + 1);
       }
@@ -103,39 +100,51 @@ export default function Dashboard({ onLogout, farmCoords }) {
     map.current.easeTo({ center: pos, duration: 500 });
   };
 
-  // --- REVEAL SCAN RESULTS ---
   const handleRevealResults = () => {
     setShowResults(true);
     scanDataBuffer.forEach(scan => {
       if (resultMarkers.current.has(scan.scan_id)) return;
-      const color = theme.severity[scan.disease_status.toLowerCase()] || '#ccc';
+      
+      const color = theme.severity[scan.severity?.toLowerCase()] || theme.severity[scan.disease_status?.toLowerCase()] || '#ccc';
+      
+      const popupHTML = `
+        <div style="color: black; padding: 10px; font-family: 'Inter', sans-serif; min-width: 240px; border-radius: 8px;">
+          <div style="margin-bottom: 8px; overflow: hidden; border-radius: 4px; border: 1px solid #ddd;">
+            <img src="${scan.image_url}" style="width: 100%; display: block;"/>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <b style="text-transform: uppercase; color: ${color}; font-size: 14px;">${scan.disease_status}</b>
+            <span style="font-size: 10px; background: #eee; padding: 2px 6px; border-radius: 10px;">Conf: ${(scan.confidence_score * 100).toFixed(0)}%</span>
+          </div>
+          <div style="background: #f8f9fa; padding: 10px; border-radius: 6px; font-size: 11px; font-family: 'monospace'; border-left: 3px solid ${color};">
+            <p style="margin: 0 0 4px 0;"><strong>ID:</strong> ${scan.scan_id}</p>
+            <p style="margin: 0 0 4px 0;"><strong>LAT:</strong> ${scan.gps_lat.toFixed(6)}</p>
+            <p style="margin: 0 0 4px 0;"><strong>LNG:</strong> ${scan.gps_lng.toFixed(6)}</p>
+            <p style="margin: 0; color: #666;">${scan.short_explanation || 'No additional details available.'}</p>
+          </div>
+        </div>
+      `;
+
       const marker = new mapboxgl.Marker({ color })
         .setLngLat([scan.gps_lng, scan.gps_lat])
-        .setPopup(new mapboxgl.Popup().setHTML(`
-          <div style="color: black; padding: 5px; font-family: sans-serif;">
-            <img src="${scan.image_url}" style="width:100%; border-radius:4px; margin-bottom:5px;"/>
-            <b style="text-transform: uppercase;">${scan.disease_status}</b><br/>
-            Confidence: ${(scan.confidence_score * 100).toFixed(1)}%
-          </div>
-        `))
+        .setPopup(new mapboxgl.Popup({ offset: 25, maxWidth: '300px' }).setHTML(popupHTML))
         .addTo(map.current);
+        
       resultMarkers.current.set(scan.scan_id, marker);
     });
 
     if (scanDataBuffer.length > 0) {
       const bounds = new mapboxgl.LngLatBounds();
       scanDataBuffer.forEach(s => bounds.extend([s.gps_lng, s.gps_lat]));
-      map.current.fitBounds(bounds, { padding: 50 });
+      map.current.fitBounds(bounds, { padding: 80 });
     }
   };
 
-  // --- UPDATED MAP INIT (STRICT MODE SAFE) ---
   useEffect(() => {
     if (map.current) return; 
     if (!MAPBOX_TOKEN || !mapContainer.current) return;
 
     mapboxgl.accessToken = MAPBOX_TOKEN;
-    
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/satellite-v9',
@@ -145,9 +154,6 @@ export default function Dashboard({ onLogout, farmCoords }) {
     });
 
     map.current.on('load', () => {
-      setMapLoaded(true);
-      console.log("🚀 Mapbox fully loaded and ready");
-
       if (!map.current.getSource('route')) {
         map.current.addSource('route', { 
           type: 'geojson', 
@@ -195,8 +201,12 @@ export default function Dashboard({ onLogout, farmCoords }) {
       setIsScanning(true);
       setError(null);
       setScanCount(0);
-      setScanDataBuffer([]); // Clear previous scan data
+      setScanDataBuffer([]); 
       setShowResults(false);
+      
+      resultMarkers.current.forEach(m => m.remove());
+      resultMarkers.current.clear();
+
       const response = await fetch(`${VITE_API_URL}/api/rover/start?farmer_id=${FARMER_ID}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -209,22 +219,30 @@ export default function Dashboard({ onLogout, farmCoords }) {
     } catch (err) {
       setError(`Mission Error: ${err.message}`);
       setIsScanning(false);
-      setConnectionStatus('error');
     }
   };
 
   const stopScan = async () => {
     const token = localStorage.getItem("token");
+    setIsScanning(false); 
     disconnectWebSockets();
+    
     try {
-      await fetch(`${VITE_API_URL}/api/rover/stop?farmer_id=${FARMER_ID}`, { 
+      const response = await fetch(`${VITE_API_URL}/api/rover/stop?farmer_id=${FARMER_ID}`, { 
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json' 
+        }
       });
-    } catch (err) { console.error("Stop signal failed"); }
-    setIsScanning(false);
-    // Note: currentSessionId is kept so results can still be viewed
-    setError("Mission complete. Review results below.");
+      
+      if (!response.ok) throw new Error("Stop signal failed on server.");
+
+      setError("Mission complete. Review results below.");
+    } catch (err) { 
+      console.error("Stop signal failed:", err);
+      setError(`Notice: ${err.message}`);
+    }
   };
 
   const handleLocateFarm = async () => {
@@ -258,7 +276,7 @@ export default function Dashboard({ onLogout, farmCoords }) {
         <div style={{ width: '320px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
           <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '15px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-            <h3 style={{ margin: '0 0 10px 0', fontSize: '11px', color: '#888', letterSpacing: '1px' }}>ROVER ID: {ROVER_ID}</h3>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '11px', color: '#888', letterSpacing: '1px' }}>SYSTEM STATUS</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: theme.darkBrown }}>
@@ -269,18 +287,6 @@ export default function Dashboard({ onLogout, farmCoords }) {
                     <Navigation size={14} /> {liveTelemetry.speed.toFixed(1)} m/s
                   </div>
                 </div>
-                
-                <div style={{ backgroundColor: '#f9fafb', padding: '12px', borderRadius: '10px', border: '1px solid #f3f4f6' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>
-                    <span>LATITUDE</span>
-                    <span>LONGITUDE</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: '600', color: theme.darkBrown, fontFamily: 'monospace' }}>
-                    <span>{liveTelemetry.lat.toFixed(6)}</span>
-                    <span>{liveTelemetry.lng.toFixed(6)}</span>
-                  </div>
-                </div>
-
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af', fontSize: '11px' }}>
                     <Clock size={12} /> Sync: {lastUpdate}
                 </div>
@@ -288,32 +294,34 @@ export default function Dashboard({ onLogout, farmCoords }) {
           </div>
 
           <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '15px', border: `1px solid ${theme.sageGreen}` }}>
-            <h4 style={{ margin: '0 0 15px 0', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}><MapPin size={16}/> MISSION PATH</h4>
+            <h4 style={{ margin: '0 0 15px 0', fontSize: '13px', fontWeight: 'bold' }}>PATH PLANNER</h4>
             <button 
               onClick={() => {
                 setIsDrawing(!isDrawing);
                 if (!isDrawing) {
                   setDrawPath([]);
-                  map.current.getSource('route')?.setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] } });
+                  if (map.current.getSource('route')) {
+                    map.current.getSource('route').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [] } });
+                  }
                 }
               }}
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: isDrawing ? '#FF8C00' : theme.sageGreen, color: 'white', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: '0.2s' }}>
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: isDrawing ? '#FF8C00' : theme.sageGreen, color: 'white', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
               <PenTool size={18} /> {isDrawing ? 'LOCK PATH' : 'DRAW NEW PATH'}
             </button>
           </div>
 
           {error && (
-            <div style={{ backgroundColor: '#FEE2E2', padding: '15px', borderRadius: '15px', color: '#991B1B', display: 'flex', gap: '10px', fontSize: '12px', border: '1px solid #EF4444' }}>
-              <ShieldAlert size={20} /> <div>{error}</div>
+            <div style={{ backgroundColor: error.includes("complete") ? "#ECFDF5" : "#FEF2F2", padding: '15px', borderRadius: '10px', color: error.includes("complete") ? "#059669" : "#DC2626", fontSize: '12px', border: '1px solid currentColor' }}>
+              {error}
             </div>
           )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: 'auto' }}>
-            {!isScanning && !scanDataBuffer.length > 0 && (
+            {!isScanning && !showResults && (
               <button 
                 onClick={startFollowPath} 
-                disabled={drawPath.length < 2 || connectionStatus === 'error'}
-                style={{ width: '100%', padding: '18px', borderRadius: '12px', color: 'white', fontWeight: 'bold', backgroundColor: (drawPath.length < 2) ? '#ccc' : '#2e7d32', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                disabled={drawPath.length < 2}
+                style={{ width: '100%', padding: '18px', borderRadius: '12px', color: 'white', fontWeight: 'bold', backgroundColor: drawPath.length < 2 ? '#ccc' : '#2e7d32', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                 <Play size={20} /> DEPLOY ROVER
               </button>
             )}
@@ -322,7 +330,7 @@ export default function Dashboard({ onLogout, farmCoords }) {
               <button 
                 onClick={stopScan} 
                 style={{ width: '100%', padding: '18px', borderRadius: '12px', color: 'white', fontWeight: 'bold', backgroundColor: '#dc2626', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                <Square size={20} /> STOP & ANALYZE
+                <Square size={20} /> STOP ROVER
               </button>
             )}
 
@@ -333,6 +341,14 @@ export default function Dashboard({ onLogout, farmCoords }) {
                 <Eye size={20} /> VIEW {scanCount} RESULTS
               </button>
             )}
+            
+            {showResults && (
+               <button 
+               onClick={() => {setShowResults(false); setScanDataBuffer([]); setDrawPath([]); setError(null); resultMarkers.current.forEach(m => m.remove()); resultMarkers.current.clear();}}
+               style={{ width: '100%', padding: '18px', borderRadius: '12px', color: theme.darkBrown, fontWeight: 'bold', backgroundColor: 'white', border: `2px solid ${theme.darkBrown}`, cursor: 'pointer' }}>
+               NEW MISSION
+             </button>
+            )}
           </div>
         </div>
 
@@ -340,24 +356,24 @@ export default function Dashboard({ onLogout, farmCoords }) {
           <div style={{ display: 'flex', gap: '10px' }}>
             <input 
               type="text" 
-              placeholder="Target farm address..." 
-              style={{ flex: 1, padding: '14px', borderRadius: '10px', border: '1px solid #ddd', outline: 'none', fontSize: '14px' }}
+              placeholder="Enter farm address..." 
+              style={{ flex: 1, padding: '14px', borderRadius: '10px', border: '1px solid #ddd', outline: 'none' }}
               value={searchInput} 
               onChange={(e) => setSearchInput(e.target.value)}
             />
             <button onClick={handleLocateFarm} style={{ padding: '0 25px', backgroundColor: theme.darkBrown, color: 'white', borderRadius: '10px', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>LOCATE</button>
           </div>
 
-          <div ref={mapContainer} style={{ flex: 1, borderRadius: '20px', overflow: 'hidden', backgroundColor: '#eee', position: 'relative', border: '6px solid white', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
-             <div style={{ position: 'absolute', top: 20, right: 20, zIndex: 10, display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+          <div ref={mapContainer} style={{ flex: 1, borderRadius: '20px', overflow: 'hidden', backgroundColor: '#eee', position: 'relative', border: '6px solid white', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+             <div style={{ position: 'absolute', top: 20, right: 20, zIndex: 10 }}>
                 <div style={{ backgroundColor: 'rgba(255,255,255,0.9)', padding: '8px 15px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   📍 <span style={{ color: theme.darkBrown }}>{scanCount} ANOMALIES FOUND</span>
                 </div>
              </div>
 
              {isScanning && (
-               <div style={{ position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', backgroundColor: 'rgba(46, 125, 50, 0.9)', color: 'white', padding: '8px 20px', borderRadius: '30px', fontSize: '13px', zIndex: 10, display: 'flex', alignItems: 'center', gap: '10px', backdropFilter: 'blur(4px)', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>
-                 <Loader2 size={16} className="animate-spin" /> LIVE SCANNING ACTIVE
+               <div style={{ position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', backgroundColor: 'rgba(46, 125, 50, 0.9)', color: 'white', padding: '8px 20px', borderRadius: '30px', fontSize: '13px', zIndex: 10, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                 <Loader2 size={16} className="animate-spin" /> MISSION IN PROGRESS
                </div>
              )}
           </div>
